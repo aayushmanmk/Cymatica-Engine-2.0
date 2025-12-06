@@ -1,4 +1,4 @@
-# ∿ C Y M A T I C A   2 . 0
+# ∿ C Y M A T I C A      2 . 0
 ### Evolved Audio Visualization Engine
 
 ![Version](https://img.shields.io/badge/Version-2.0-00ffcc?style=for-the-badge)
