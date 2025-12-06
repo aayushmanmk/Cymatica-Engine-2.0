@@ -4,7 +4,6 @@
 ![Version](https://img.shields.io/badge/Version-2.0-00ffcc?style=for-the-badge)
 ![Tech](https://img.shields.io/badge/Three.js-WebGL-white?style=for-the-badge&logo=three.js)
 ![Audio](https://img.shields.io/badge/Web_Audio_API-High_Fidelity-blue?style=for-the-badge)
-![License](https://img.shields.io/badge/License-MIT-purple?style=for-the-badge)
 
 > **Cymatica** is a single-file, browser-based generative audio engine. It utilizes **WebGL shaders (GLSL)** and the **Web Audio API** to interpret audio frequencies into real-time, physics-based visual phenomena. Unlike standard visualizers, Cymatica employs a spring-physics model to simulate weight and impact for bass response.
 
