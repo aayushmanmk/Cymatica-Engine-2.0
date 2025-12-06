@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CYMATICA | Pro Audio Visualizer</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Syncopate:wght@700&display=swap');
+
+        :root {
+            --glass: rgba(5, 5, 8, 0.9);
+            --border: rgba(255, 255, 255, 0.15);
+            --accent: #fff;
+        }
+
+        body { margin: 0; overflow: hidden; background-color: #000; color: #eee; font-family: 'Rajdhani', sans-serif; user-select: none; }
+        
+        #canvas-container {
+            width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+            transition: background 1s ease;
+        }
+
+        /* UI OVERLAY */
+        #ui {
+            position: absolute; z-index: 100; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background: rgba(0,0,0,0.85); backdrop-filter: blur(25px); transition: opacity 0.8s, visibility 0.8s;
+        }
+        h1 { font-family: 'Syncopate', sans-serif; font-size: 3rem; letter-spacing: 12px; margin: 0; text-shadow: 0 0 30px rgba(255,255,255,0.2); text-align: center; line-height: 1.2;}
+        .subtitle { font-size: 1rem; letter-spacing: 4px; color: #888; margin-bottom: 3rem; text-transform: uppercase; font-weight: 600; }
+        
+        .btn-main {
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.25); color: #fff;
+            padding: 18px 50px; font-size: 1rem; font-family: 'Rajdhani', sans-serif; font-weight: 700;
+            letter-spacing: 4px; cursor: pointer; transition: all 0.3s; margin-top: 20px; text-transform: uppercase;
+        }
+        .btn-main:hover { background: #fff; color: #000; box-shadow: 0 0 40px rgba(255,255,255,0.4); }
+        
+        input[type="file"] { display: none; }
+
+        /* HUD */
+        #hud {
+            position: absolute; top: 40px; left: 40px; z-index: 50; pointer-events: none;
+            display: flex; flex-direction: column; gap: 8px; opacity: 0; transition: opacity 1s;
+        }
+        .hud-line { font-size: 11px; color: #666; letter-spacing: 2px; border-left: 2px solid #333; padding-left: 12px; font-weight: 600; }
+        .hud-active { color: #fff; border-color: #fff; text-shadow: 0 0 10px rgba(255,255,255,0.3); }
+
+        /* CONTROL DECK */
+        #control-deck {
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); z-index: 60;
+            width: 800px; max-width: 95%; opacity: 0; transition: all 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        #control-deck.collapsed { transform: translateX(-50%) translateY(270px); }
+        
+        #collapse-toggle {
+            background: var(--glass); border: 1px solid var(--border); border-bottom: none; color: #888;
+            padding: 6px 30px; font-size: 0.7rem; cursor: pointer; margin: 0 auto; display: block;
+            border-radius: 8px 8px 0 0; transition: color 0.3s;
+        }
+        #collapse-toggle:hover { color: #fff; }
+        
+        .deck-body {
+            background: var(--glass); border: 1px solid var(--border); backdrop-filter: blur(25px);
+            padding: 25px 35px; border-radius: 16px; box-shadow: 0 30px 80px rgba(0,0,0,0.8);
+            display: flex; flex-direction: column; gap: 20px;
+        }
+
+        /* CONTROLS */
+        .controls-main { display: flex; align-items: center; gap: 25px; }
+        .play-btn {
+            width: 55px; height: 55px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3);
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            color: #fff; font-size: 1.2rem; transition: all 0.2s; background: rgba(255,255,255,0.05); flex-shrink: 0;
+        }
+        .play-btn:hover { background: #fff; color: #000; }
+        .timeline { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; }
+        .time-info { display: flex; justify-content: space-between; font-size: 0.8rem; color: #888; margin-bottom: 5px; }
+
+        .controls-tools { display: flex; gap: 20px; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 15px; }
+        .tool-group { display: flex; align-items: center; gap: 10px; color: #888; font-size: 0.75rem; font-weight: 600; }
+        
+        .action-btn {
+            background: transparent; border: 1px solid #444; color: #888; padding: 6px 16px;
+            font-size: 0.75rem; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: 700; display: flex; align-items: center; gap: 6px;
+        }
+        .action-btn:hover { border-color: #fff; color: #fff; background: rgba(255,255,255,0.1); }
+        .action-btn.active { border-color: #fff; color: #fff; background: #fff; color: #000; }
+
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]:focus { outline: none; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 3px; cursor: pointer; background: rgba(255,255,255,0.15); }
+        input[type=range]::-webkit-slider-thumb {
+            height: 12px; width: 12px; border-radius: 50%; background: #fff; cursor: pointer;
+            -webkit-appearance: none; margin-top: -4.5px; box-shadow: 0 0 10px rgba(255,255,255,0.3);
+        }
+
+        /* SKINS GRID: 2 Rows of 5 */
+        .skins-container { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+        .skin-btn {
+            background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.15);
+            color: #777; padding: 12px 0; font-size: 0.7rem; text-transform: uppercase;
+            cursor: pointer; border-radius: 4px; transition: all 0.3s;
+        }
+        .skin-btn:hover { color: #fff; border-color: rgba(255,255,255,0.5); }
+        .skin-btn.active { background: #fff; color: #000; border-color: #fff; font-weight: 700; box-shadow: 0 0 15px rgba(255,255,255,0.3); }
+
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <h1>CYMATICA</h1>
+        <div class="subtitle">PRO AUDIO VISUALIZER V10</div>
+        <button class="btn-main" onclick="document.getElementById('file-input').click()">INITIALIZE SYSTEM</button>
+    </div>
+
+    <input type="file" id="file-input" accept="audio/*, .flac, .mp3, .wav">
+
+    <div id="hud">
+        <div class="hud-line hud-active" id="track-name">SYSTEM STANDBY</div>
+        <div class="hud-line" id="audio-stats">VELOCITY: 0 | PRESSURE: 0</div>
+        <div class="hud-line" id="skin-stats">MODE: NEON</div>
+    </div>
+
+    <div id="control-deck">
+        <button id="collapse-toggle">▼ CONTROLS</button>
+        <div class="deck-body">
+            <div class="controls-main">
+                <div class="play-btn" id="play-btn">▶</div>
+                <div class="timeline">
+                    <div class="time-info">
+                        <span id="curr-time">0:00</span>
+                        <span id="dur-time">0:00</span>
+                    </div>
+                    <input type="range" id="seek-slider" min="0" value="0" step="0.1">
+                </div>
+            </div>
+            <div class="controls-tools">
+                <div class="tool-group" style="width: 25%;">
+                    <span>VOL</span> <input type="range" id="vol-slider" min="0" max="1" step="0.01" value="1">
+                </div>
+                <div class="tool-group" style="width: 25%;">
+                    <span>SPD</span> <input type="range" id="speed-slider" min="0.5" max="1.5" step="0.1" value="1">
+                </div>
+                <div class="tool-group" style="justify-content: flex-end; flex-grow: 1; gap: 10px;">
+                    <button id="loop-btn" class="action-btn">LOOP</button>
+                    <button id="load-btn" class="action-btn" onclick="document.getElementById('file-input').click()">📂 LOAD</button>
+                </div>
+            </div>
+            <div class="skins-container">
+                <button class="skin-btn active" data-skin="neon">Neon</button>
+                <button class="skin-btn" data-skin="void">Void</button>
+                <button class="skin-btn" data-skin="solar">Solar</button>
+                <button class="skin-btn" data-skin="quantum">Quantum</button>
+                <button class="skin-btn" data-skin="plasma">Plasma</button>
+                <button class="skin-btn" data-skin="retro">Retro</button>
+                <button class="skin-btn" data-skin="helix">Helix</button>
+                <button class="skin-btn" data-skin="crystal">Crystal</button>
+                <button class="skin-btn" data-skin="waves">Waves</button>
+                <button class="skin-btn" data-skin="glitch">Glitch</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+        import { RGBShiftShader } from 'three/addons/shaders/RGBShiftShader.js';
+
+        const CONFIG = { fftSize: 2048, bloomStr: 0.6, bloomRad: 0.6, bloomThres: 0.15 };
+        const STATE = { playing: false, dragging: false, skin: 'neon', loop: false };
+
+        const NOISE_GLSL = `
+            vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
+            vec4 mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}
+            vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}
+            vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}
+            float snoise(vec3 v){
+                const vec2 C=vec2(1.0/6.0,1.0/3.0); const vec4 D=vec4(0.0,0.5,1.0,2.0);
+                vec3 i=floor(v+dot(v,C.yyy)); vec3 x0=v-i+dot(i,C.xxx);
+                vec3 g=step(x0.yzx,x0.xyz); vec3 l=1.0-g;
+                vec3 i1=min(g.xyz,l.zxy); vec3 i2=max(g.xyz,l.zxy);
+                vec3 x1=x0-i1+C.xxx; vec3 x2=x0-i2+C.yyy; vec3 x3=x0-D.yyy;
+                i=mod289(i);
+                vec4 p=permute(permute(permute(i.z+vec4(0.0,i1.z,i2.z,1.0))+i.y+vec4(0.0,i1.y,i2.y,1.0))+i.x+vec4(0.0,i1.x,i2.x,1.0));
+                float n_=0.142857142857; vec3 ns=n_*D.wyz-D.xzx;
+                vec4 j=p-49.0*floor(p*ns.z*ns.z); vec4 x_=floor(j*ns.z); vec4 y_=floor(j-7.0*x_);
+                vec4 x=x_*ns.x+ns.yyyy; vec4 y=y_*ns.x+ns.yyyy; vec4 h=1.0-abs(x)-abs(y);
+                vec4 b0=vec4(x.xy,y.xy); vec4 b1=vec4(x.zw,y.zw);
+                vec4 s0=floor(b0)*2.0+1.0; vec4 s1=floor(b1)*2.0+1.0; vec4 sh=-step(h,vec4(0.0));
+                vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy; vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
+                vec3 p0=vec3(a0.xy,h.x); vec3 p1=vec3(a0.zw,h.y); vec3 p2=vec3(a1.xy,h.z); vec3 p3=vec3(a1.zw,h.w);
+                vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+                p0*=norm.x; p1*=norm.y; p2*=norm.z; p3*=norm.w;
+                vec4 m=max(0.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.0);
+                m=m*m; return 42.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
+            }
+        `;
+
+        const SKINS = {
+            neon: {
+                bg: 'radial-gradient(circle at center, #050510 0%, #000 100%)',
+                bloom: { str: 0.5, rad: 0.4, thres: 0.15 },
+                init(scene, uniforms) {
+                    const geo = new THREE.IcosahedronGeometry(1.2, 30);
+                    const mat = new THREE.ShaderMaterial({
+                        uniforms: uniforms, wireframe: true, transparent: true,
+                        vertexShader: `${NOISE_GLSL} uniform float uTime; uniform float uBass; varying float vD;
+                            void main() { float n = snoise(position + uTime * 0.5); float d = n * (0.1 + uBass * 0.6); vD = d; gl_Position = projectionMatrix * modelViewMatrix * vec4(position + normal * d, 1.0); }`,
+                        fragmentShader: `varying float vD; void main() { gl_FragColor = vec4(mix(vec3(0,0.5,1), vec3(0,1,0.5), vD*3.0), 0.8); }`
+                    });
+                    scene.add(new THREE.Mesh(geo, mat));
+                    const pGeo = new THREE.BufferGeometry();
+                    const pPos = new Float32Array(2000 * 3);
+                    for(let i=0; i<6000; i++) pPos[i] = (Math.random()-0.5)*25;
+                    pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+                    scene.add(new THREE.Points(pGeo, new THREE.PointsMaterial({color: 0x00aaff, size: 0.04, opacity: 0.5, transparent:true})));
+                }
+            },
+            void: {
+                bg: 'radial-gradient(circle at center, #080808 0%, #000 100%)',
+                bloom: { str: 0.4, rad: 0.8, thres: 0.2 },
+                init(scene, uniforms) {
+                    const geo = new THREE.IcosahedronGeometry(1.4, 60);
+                    const mat = new THREE.ShaderMaterial({
+                        uniforms: uniforms,
+                        vertexShader: `${NOISE_GLSL} uniform float uTime; uniform float uBass; varying vec3 vN; varying float vD;
+                            void main() { vN = normal; float n1 = snoise(position * 2.0 + uTime * 0.2); float d = n1 * (0.2 + uBass * 0.9); vD = d; gl_Position = projectionMatrix * modelViewMatrix * vec4(position + normal * d, 1.0); }`,
+                        fragmentShader: `varying vec3 vN; varying float vD; void main() { float rim = pow(1.0 - dot(vN, vec3(0,0,1)), 3.0); vec3 col = mix(vec3(0.02), vec3(0.15, 0.0, 0.4), smoothstep(-0.2, 0.5, vD)); gl_FragColor = vec4(col + vec3(0.2, 0.5, 1.0) * rim * 0.6, 1.0); }`
+                    });
+                    scene.add(new THREE.Mesh(geo, mat));
+                }
+            },
+            solar: {
+                bg: 'radial-gradient(circle at center, #250000 0%, #000 100%)',
+                bloom: { str: 0.8, rad: 0.6, thres: 0.3 },
+                init(scene, uniforms) {
+                    const geo = new THREE.SphereGeometry(1.3, 64, 64);
+                    const mat = new THREE.ShaderMaterial({
+                        uniforms: uniforms,
+                        vertexShader: `${NOISE_GLSL} uniform float uTime; uniform float uBass; varying float vN;
+                            void main() { float n = snoise(position * 2.5 + uTime * 0.4); vN = n; float flare = max(0.0, n) * uBass * 0.8; gl_Position = projectionMatrix * modelViewMatrix * vec4(position + normal * (flare * 0.5), 1.0); }`,
+                        fragmentShader: `varying float vN; uniform float uBass; void main() { float i = smoothstep(-0.5, 1.0, vN + uBass * 0.5); gl_FragColor = vec4(mix(vec3(0.4, 0.0, 0.0), vec3(1.0, 0.4, 0.0), i), 1.0); }`
+                    });
+                    scene.add(new THREE.Mesh(geo, mat));
+                }
+            },
+            quantum: {
+                bg: 'radial-gradient(circle at center, #001010 0%, #000 100%)',
+                bloom: { str: 0.9, rad: 0.3, thres: 0.1 },
+                init(scene, uniforms) {
+                    const count = 8000;
+                    const pos = new Float32Array(count * 3); const orig = new Float32Array(count * 3);
+                    for(let i=0; i<count; i++) { const x = (Math.random()-0.5)*3.5, y = (Math.random()-0.5)*3.5, z = (Math.random()-0.5)*3.5; pos[i*3]=x; pos[i*3+1]=y; pos[i*3+2]=z; orig[i*3]=x; orig[i*3+1]=y; orig[i*3+2]=z; }
+                    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('aOrig', new THREE.BufferAttribute(orig, 3));
+                    const mat = new THREE.ShaderMaterial({
+                        uniforms: uniforms, transparent: true,
+                        vertexShader: `uniform float uTime; uniform float uBass; uniform float uTreble; attribute vec3 aOrig; varying float vDist;
+                            void main() { vec3 p = aOrig; float n = sin(p.y * 5.0 + uTime) * cos(p.z * 5.0 + uTime); vec3 dir = normalize(p); p += dir * (uBass * 2.5 * (1.0 + n)); p.x += sin(uTime * 20.0 + p.y) * uTreble * 0.1; vDist = length(p); gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); gl_PointSize = 1.5 + uTreble * 2.0; }`,
+                        fragmentShader: `varying float vDist; void main() { vec3 col = mix(vec3(0, 1, 0.8), vec3(1.0), smoothstep(2.0, 4.0, vDist)); gl_FragColor = vec4(col, 1.0 - smoothstep(4.0, 6.0, vDist)); }`
+                    });
+                    scene.add(new THREE.Points(geo, mat));
+                }
+            },
+            plasma: {
+                bg: 'radial-gradient(circle at center, #000020 0%, #000 100%)',
+                bloom: { str: 1.0, rad: 0.4, thres: 0.15 },
+                init(scene, uniforms) {
+                    const geo = new THREE.IcosahedronGeometry(1.2, 40);
+                    const mat = new THREE.ShaderMaterial({
+                        uniforms: uniforms, transparent: true,
+                        vertexShader: `${NOISE_GLSL} uniform float uTime; uniform float uBass; varying float vN;
+                            void main() { float n = snoise(position * 3.0 + uTime * 2.0); vec3 p = position + normal * (n * (0.1 + uBass)); vN = n; gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }`,
+                        fragmentShader: `uniform float uTreble; varying float vN; void main() { float arc = smoothstep(0.4, 0.5, abs(vN)); vec3 col = vec3(0.2, 0.6, 1.0) * (arc + 0.1) * (1.0 + uTreble * 2.0); gl_FragColor = vec4(col, 0.6 + arc); }`
+                    });
+                    scene.add(new THREE.Mesh(geo, mat));
+                    const core = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 32), new THREE.MeshBasicMaterial({color: 0x4488ff}));
+                    scene.add(core);
+                }
+            },
+            retro: {
+                bg: 'linear-gradient(to top, #100010 0%, #000020 100%)',
+                bloom: { str: 0.7, rad: 0.7, thres: 0.15 },
+                init(scene, uniforms) {
+                    const grid = new THREE.Mesh(new THREE.PlaneGeometry(60, 60, 40, 40), new THREE.ShaderMaterial({
+                        uniforms: uniforms, wireframe: true, transparent: true,
+                        vertexShader: `uniform float uBass; uniform float uTime; varying float vY; void main() { vec3 p = position; p.z += sin(p.x*0.4+uTime)*cos(p.y*0.4)* (1.0+uBass); vY = p.y; gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }`,
+                        fragmentShader: `varying float vY; void main() { gl_FragColor = vec4(0.8, 0.0, 1.0, smoothstep(30.0, 0.0, abs(vY))); }`
+                    }));
+                    grid.rotation.x = -Math.PI / 2; grid.position.y = -2; scene.add(grid);
+                    const sun = new THREE.Mesh(new THREE.CircleGeometry(2.5, 64), new THREE.ShaderMaterial({
+                        uniforms: uniforms, transparent: true,
+                        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+                        fragmentShader: `varying vec2 vUv; uniform float uBass; void main() { float bars = step(0.5, sin(vUv.y * 30.0 + uBass)); vec3 col = mix(vec3(1.0, 0.0, 0.5), vec3(1.0, 0.8, 0.0), vUv.y); gl_FragColor = vec4(col, bars); }`
+                    }));
+                    sun.position.set(0, 2, -6); scene.add(sun);
+                }
+            },
+            helix: {
+                bg: 'radial-gradient(circle at center, #000000 0%, #001000 100%)',
+                bloom: { str: 0.8, rad: 0.4, thres: 0.1 },
+                init(scene, uniforms) {
+                    const count = 600; const geo = new THREE.BufferGeometry(); const pos = new Float32Array(count * 3);
+                    for(let i=0; i<count; i++) {
+                        const t = i/count * Math.PI * 10;
+                        pos[i*3] = Math.cos(t); pos[i*3+1] = (i/count)*10 - 5; pos[i*3+2] = Math.sin(t);
+                    }
+                    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+                    const mat = new THREE.ShaderMaterial({
+                        uniforms: uniforms, transparent: true,
+                        vertexShader: `uniform float uTime; uniform float uBass; void main() { vec3 p = position; float twist = p.y * 0.5 + uTime; p.x += cos(twist)*uBass; p.z += sin(twist)*uBass; gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); gl_PointSize = 4.0; }`,
+                        fragmentShader: `void main() { gl_FragColor = vec4(0.0, 1.0, 0.5, 1.0); }`
+                    });
+                    scene.add(new THREE.Points(geo, mat));
+                    // Clone for double helix
+                    const mesh2 = new THREE.Points(geo, mat); mesh2.rotation.y = Math.PI; scene.add(mesh2);
+                }
+            },
+            crystal: {
+                bg: 'radial-gradient(circle at center, #101015 0%, #000 100%)',
+                bloom: { str: 0.6, rad: 0.5, thres: 0.1 },
+                init(scene, uniforms) {
+                    const geo = new THREE.IcosahedronGeometry(1.3, 0); geo.computeVertexNormals();
+                    const mat = new THREE.ShaderMaterial({
+                        uniforms: uniforms, flatShading: true,
+                        vertexShader: `varying vec3 vN; void main() { vN = normal; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+                        fragmentShader: `varying vec3 vN; uniform float uTreble; void main() { float f = pow(1.0 - dot(vN, vec3(0,0,1)), 2.0); vec3 col = mix(vec3(0.1, 0.1, 0.2), vec3(0.8, 0.9, 1.0), f * (0.5 + uTreble)); gl_FragColor = vec4(col, 1.0); }`
+                    });
+                    scene.add(new THREE.Mesh(geo, mat));
+                }
+            },
+            waves: {
+                bg: 'radial-gradient(circle at center, #000 0%, #100010 100%)',
+                bloom: { str: 1.0, rad: 0.6, thres: 0.1 },
+                init(scene, uniforms) {
+                    const count = 40; 
+                    const geo = new THREE.TorusGeometry(1, 0.02, 16, 100);
+                    const mat = new THREE.MeshBasicMaterial({ color: 0xff00ff });
+                    const inst = new THREE.InstancedMesh(geo, mat, count);
+                    inst.userData = { isWaves: true, count: count };
+                    scene.add(inst);
+                }
+            },
+            glitch: {
+                bg: 'radial-gradient(circle at center, #101010 0%, #000 100%)',
+                bloom: { str: 0.9, rad: 0.2, thres: 0.1 },
+                init(scene, uniforms) {
+                    const geo = new THREE.IcosahedronGeometry(1.3, 10);
+                    const mat = new THREE.ShaderMaterial({
+                        uniforms: uniforms, wireframe: true,
+                        vertexShader: `uniform float uTime; uniform float uTreble; void main() { vec3 p = position; p.x += step(0.9, sin(p.y * 10.0 + uTime * 20.0)) * uTreble * 0.2; gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }`,
+                        fragmentShader: `void main() { gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0); }`
+                    });
+                    scene.add(new THREE.Mesh(geo, mat));
+                }
+            }
+        };
+
+        const AudioEngine = {
+            ctx: null, src: null, analyser: null, data: null, el: null, gain: null,
+            bands: { sub: 0, treble: 0 }, physics: { velocity: 0, scale: 1.0 },
+
+            init(file) {
+                if(this.el) { this.el.pause(); this.el.src=''; }
+                const Ctx = window.AudioContext || window.webkitAudioContext;
+                if(!this.ctx) this.ctx = new Ctx();
+                if(this.ctx.state === 'suspended') this.ctx.resume();
+
+                this.el = new Audio();
+                this.el.crossOrigin = "anonymous";
+                this.el.src = URL.createObjectURL(file);
+
+                if(this.src) this.src.disconnect();
+                this.src = this.ctx.createMediaElementSource(this.el);
+                this.gain = this.ctx.createGain();
+                this.analyser = this.ctx.createAnalyser();
+                
+                this.src.connect(this.gain);
+                this.gain.connect(this.analyser);
+                this.analyser.connect(this.ctx.destination);
+
+                this.analyser.fftSize = CONFIG.fftSize;
+                this.analyser.smoothingTimeConstant = 0.8;
+                this.data = new Uint8Array(this.analyser.frequencyBinCount);
+
+                this.el.addEventListener('timeupdate', () => {
+                   if(!STATE.dragging) document.getElementById('seek-slider').value = this.el.currentTime;
+                   document.getElementById('curr-time').innerText = fmtTime(this.el.currentTime);
+                });
+                this.el.addEventListener('loadedmetadata', () => {
+                    document.getElementById('seek-slider').max = this.el.duration;
+                    document.getElementById('dur-time').innerText = fmtTime(this.el.duration);
+                });
+                this.el.addEventListener('ended', () => { 
+                    if(STATE.loop) { this.el.currentTime = 0; this.el.play(); }
+                    else { STATE.playing = false; document.getElementById('play-btn').innerText = "▶"; }
+                });
+
+                return this.el.play();
+            },
+
+            update() {
+                if(!this.analyser) return;
+                this.analyser.getByteFrequencyData(this.data);
+                const getAvg = (s, e) => {
+                    const l = Math.floor(s*this.analyser.frequencyBinCount/22050);
+                    const h = Math.floor(e*this.analyser.frequencyBinCount/22050);
+                    let sum=0; for(let i=l; i<=h; i++) sum+=this.data[i];
+                    return (sum/(h-l+1))/255;
+                };
+                const sub = getAvg(20, 80);
+                const treb = getAvg(4000, 10000);
+
+                if (sub > 0.4) this.physics.velocity += 0.02 * sub; 
+                this.physics.velocity -= (this.physics.scale - 1.0) * 0.1;
+                this.physics.velocity *= 0.85; 
+                this.physics.scale += this.physics.velocity;
+
+                this.bands.sub = THREE.MathUtils.lerp(this.bands.sub, sub, 0.3);
+                this.bands.treble = THREE.MathUtils.lerp(this.bands.treble, treb, 0.1);
+            }
+        };
+
+        let scene, camera, renderer, composer, bloomPass, rgbPass, uniforms;
+        const clock = new THREE.Clock();
+        const dummy = new THREE.Object3D();
+        const color = new THREE.Color();
+
+        function initRenderer() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 1000);
+            camera.position.z = 4.5;
+
+            renderer = new THREE.WebGLRenderer({antialias: false, alpha: true});
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+            rgbPass = new ShaderPass(RGBShiftShader);
+            rgbPass.uniforms['amount'].value = 0.001;
+
+            composer = new EffectComposer(renderer);
+            composer.addPass(new RenderPass(scene, camera));
+            composer.addPass(bloomPass);
+            composer.addPass(rgbPass);
+
+            uniforms = { uTime: { value: 0 }, uBass: { value: 0 }, uTreble: { value: 0 } };
+            loadSkin('neon');
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth/window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                composer.setSize(window.innerWidth, window.innerHeight);
+            });
+            animate();
+        }
+
+        function loadSkin(key) {
+            while(scene.children.length > 0) {
+                const o = scene.children[0];
+                if(o.geometry) o.geometry.dispose();
+                if(o.material) (o.material.length?o.material: [o.material]).forEach(m=>m.dispose());
+                scene.remove(o);
+            }
+            STATE.skin = key;
+            SKINS[key].init(scene, uniforms);
+            document.getElementById('canvas-container').style.background = SKINS[key].bg;
+            bloomPass.strength = SKINS[key].bloom.str;
+            bloomPass.radius = SKINS[key].bloom.rad;
+            bloomPass.threshold = SKINS[key].bloom.thres;
+            document.getElementById('skin-stats').innerText = `MODE: ${key.toUpperCase()}`;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const t = clock.getElapsedTime();
+            uniforms.uTime.value = t;
+            if(STATE.playing) AudioEngine.update();
+            uniforms.uBass.value = AudioEngine.bands.sub;
+            uniforms.uTreble.value = AudioEngine.bands.treble;
+
+            // Global Physics
+            scene.scale.setScalar(AudioEngine.physics.scale);
+            scene.rotation.y = t * 0.1;
+            rgbPass.uniforms['amount'].value = 0.001 + (AudioEngine.physics.scale - 1.0) * 0.01;
+
+            // WAVES SKIN SPECIFIC
+            if(STATE.skin === 'waves' && STATE.playing) {
+                scene.traverse(obj => {
+                    if(obj.userData.isWaves) {
+                        const count = obj.userData.count;
+                        for(let i=0; i<count; i++) {
+                            // Map low freqs to outer rings, high to inner
+                            const freqIdx = Math.floor((i/count) * 20); 
+                            const val = AudioEngine.data ? AudioEngine.data[freqIdx] / 255.0 : 0;
+                            dummy.scale.setScalar(1.0 + val * 0.5);
+                            dummy.position.set(0, 0, -i * 0.5 + 5); // Tunnel
+                            dummy.rotation.z = t * 0.5 + i * 0.1;
+                            dummy.updateMatrix();
+                            obj.setMatrixAt(i, dummy.matrix);
+                            
+                            color.setHSL(i/count + val, 1.0, 0.5);
+                            obj.setColorAt(i, color);
+                        }
+                        obj.instanceMatrix.needsUpdate = true;
+                        obj.instanceColor.needsUpdate = true;
+                    }
+                });
+            }
+
+            if(STATE.playing) {
+                document.getElementById('audio-stats').innerText = `VELOCITY: ${(AudioEngine.bands.sub*100).toFixed(0)} | PRESSURE: ${(AudioEngine.bands.treble*100).toFixed(0)}`;
+            }
+            composer.render();
+        }
+
+        function fmtTime(s) { const m=Math.floor(s/60),sec=Math.floor(s%60); return `${m}:${sec<10?'0':''}${sec}`; }
+
+        // Events
+        document.getElementById('file-input').addEventListener('change', async (e) => {
+            if(e.target.files[0]) {
+                document.getElementById('ui').style.opacity = 0;
+                setTimeout(()=>document.getElementById('ui').style.visibility='hidden', 800);
+                document.getElementById('hud').style.opacity = 1;
+                document.getElementById('control-deck').style.opacity = 1;
+                document.getElementById('track-name').innerText = e.target.files[0].name.substring(0,25).toUpperCase();
+                await AudioEngine.init(e.target.files[0]);
+                STATE.playing = true; document.getElementById('play-btn').innerText = "❚❚";
+            }
+        });
+        document.getElementById('play-btn').addEventListener('click', () => {
+            if(!AudioEngine.el) return;
+            if(STATE.playing) { AudioEngine.el.pause(); STATE.playing = false; document.getElementById('play-btn').innerText = "▶"; }
+            else { AudioEngine.el.play(); STATE.playing = true; document.getElementById('play-btn').innerText = "❚❚"; }
+        });
+        document.getElementById('seek-slider').addEventListener('mousedown', ()=>STATE.dragging=true);
+        document.getElementById('seek-slider').addEventListener('change', (e)=> { AudioEngine.el.currentTime = e.target.value; STATE.dragging = false; });
+        document.getElementById('vol-slider').addEventListener('input', (e) => { if(AudioEngine.gain) AudioEngine.gain.gain.value = e.target.value; });
+        document.getElementById('speed-slider').addEventListener('input', (e) => { if(AudioEngine.el) AudioEngine.el.playbackRate = e.target.value; });
+        document.getElementById('loop-btn').addEventListener('click', (e) => { STATE.loop = !STATE.loop; e.target.classList.toggle('active'); });
+        document.querySelectorAll('.skin-btn').forEach(b => {
+            b.addEventListener('click', (e) => {
+                document.querySelectorAll('.skin-btn').forEach(x=>x.classList.remove('active'));
+                e.target.classList.add('active');
+                loadSkin(e.target.dataset.skin);
+            });
+        });
+        document.getElementById('collapse-toggle').addEventListener('click', (e) => {
+            const d = document.getElementById('control-deck');
+            d.classList.toggle('collapsed');
+            e.target.innerText = d.classList.contains('collapsed') ? "▲" : "▼ CONTROLS";
+        });
+
+        initRenderer();
+    </script>
+</body>
+</html>
