@@ -1,7 +1,7 @@
 # ∿ C Y M A T I C A
 ### Pro Audio Visualization Engine
 
-![Version](https://img.shields.io/badge/Version-10.0-00ffcc?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-2.0-00ffcc?style=for-the-badge)
 ![Tech](https://img.shields.io/badge/Three.js-WebGL-white?style=for-the-badge&logo=three.js)
 ![Audio](https://img.shields.io/badge/Web_Audio_API-High_Fidelity-blue?style=for-the-badge)
 
