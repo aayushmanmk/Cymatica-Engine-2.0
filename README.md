@@ -35,6 +35,9 @@ Browsers often block the Web Audio API or high-res textures when running directl
     ```
 3.  Navigate to `http://localhost:8000`.
 
+### Option 3: Open the file directly
+This can be done by opening the .html file in any browser with javascript enabled.
+
 ---
 
 ## 🎨 Visual Modes (Skins)
